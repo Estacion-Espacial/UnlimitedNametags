@@ -31,11 +31,13 @@ jobs:
           ./gradlew build
           echo "::set-output name=jar_file::$(find build/libs -name '*MC*.jar' -print -quit)"
 
-      - name: Extract version from build.gradle.kts
-        id: extract_version
+      # Use the Git commit SHA as version
+      - name: Set version from Git SHA
+        id: set_version
         run: |
-          VERSION=$(grep '^[[:space:]]*version[[:space:]]*=' build.gradle.kts | sed -E 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
+          VERSION=$(git rev-parse --short HEAD)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version set to $VERSION"
 
       - name: Determine next build number
         id: build_number
