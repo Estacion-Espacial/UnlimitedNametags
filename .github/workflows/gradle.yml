@@ -29,9 +29,9 @@ jobs:
         id: build
         run: |
           ./gradlew build
-          echo "::set-output name=jar_file::$(find build/libs -name '*MC*.jar' -print -quit)"
+          # optional: print what was built
+          ls -alh build/libs
 
-      # Use the Git commit SHA as version
       - name: Set version from Git SHA
         id: set_version
         run: |
@@ -52,6 +52,14 @@ jobs:
           fi
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
+      - name: Upload JARs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jars-${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}
+          path: build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Create and push tag
         if: "!contains(github.event.head_commit.message, '[release skip]')"
         run: |
@@ -63,11 +71,12 @@ jobs:
 
       - name: Create GitHub Release
         if: "!contains(github.event.head_commit.message, '[release skip]')"
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
           name: "Release v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
-          files: ${{ steps.build.outputs.jar_file }}
+          files: |
+            build/libs/*.jar
           draft: false
           prerelease: false
         env:
