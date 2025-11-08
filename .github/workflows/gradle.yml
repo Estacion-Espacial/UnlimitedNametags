@@ -11,10 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # ensure tags are available
+      - uses: actions/checkout@v4
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -28,31 +25,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle (jar)
+      - name: Build with Gradle Wrapper
         id: build
         run: |
           ./gradlew build
-          # pick the main jar (exclude -sources/-javadoc variants)
-          JAR_PATH=$(ls -1 build/libs/*.jar | grep -Ev '(sources|javadoc)\.jar$' | head -n1 || true)
-          echo "Found jar: ${JAR_PATH}"
-          if [ -z "$JAR_PATH" ]; then
-            echo "No JAR found in build/libs"; ls -al build/libs || true; exit 1
-          fi
-          echo "jar_file=${JAR_PATH}" >> "$GITHUB_OUTPUT"
+          echo "::set-output name=jar_file::$(find build/libs -name '*MC*.jar' -print -quit)"
 
       - name: Extract version from build.gradle.kts
         id: extract_version
         run: |
           VERSION=$(grep '^[[:space:]]*version[[:space:]]*=' build.gradle.kts | sed -E 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
-          if [ -z "$VERSION" ]; then
-            echo "Could not parse version from build.gradle.kts"; exit 1
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Determine next build number
         id: build_number
         run: |
-          git fetch --tags --quiet
+          git fetch --tags
           TAG_PATTERN="v${VERSION}-build-"
           LAST_TAG=$(git tag --list "${TAG_PATTERN}*" | sort -V | tail -n1)
           if [[ $LAST_TAG =~ -build-([0-9]+)$ ]]; then
@@ -60,8 +48,7 @@ jobs:
           else
             BUILD_NUMBER=1
           fi
-          echo "Using build number: ${BUILD_NUMBER}"
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
       - name: Create and push tag
         if: "!contains(github.event.head_commit.message, '[release skip]')"
@@ -69,12 +56,8 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           NEW_TAG="v${VERSION}-build-${BUILD_NUMBER}"
-          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
-            echo "Tag $NEW_TAG already exists; skipping creation."
-          else
-            git tag "$NEW_TAG"
-            git push origin "$NEW_TAG"
-          fi
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
 
       - name: Create GitHub Release
         if: "!contains(github.event.head_commit.message, '[release skip]')"
