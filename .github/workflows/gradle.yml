@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # ensure tags/history for build number calc
+          fetch-depth: 0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -31,8 +31,8 @@ jobs:
         id: build
         run: |
           ./gradlew shadowJar --no-daemon
-          echo "== Built JARs =="
-          find . -type f -path "*/build/libs/*.jar" -print -exec ls -lh {} \;
+          echo "== Build tree (top level) =="
+          ls -alh
 
       - name: Set version from Git SHA
         id: set_version
@@ -55,12 +55,40 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "Next build number: $BUILD_NUMBER"
 
+      # 🔎 Collect ALL built JARs anywhere in the repo (ignore caches), copy to artifacts/
+      - name: Collect built JARs
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          echo "Searching for JARs..."
+          mapfile -t JARS < <(find . -type f -name '*.jar' \
+            -not -path '*/.gradle/*' \
+            -not -path '*/buildSrc/.gradle/*' \
+            -not -path '*/.git/*')
+          if [ "${#JARS[@]}" -eq 0 ]; then
+            echo "No JARs found. Here is the project tree for debugging:"
+            find . -maxdepth 3 -type d -print
+            exit 1
+          fi
+          echo "Found ${#JARS[@]} JAR(s):"
+          for f in "${JARS[@]}"; do
+            ls -lh "$f"
+          done
+          echo "Copying to artifacts/ with unique names..."
+          for f in "${JARS[@]}"; do
+            base="$(basename "$f")"
+            name="${base%.jar}"
+            # Append the Git SHA to avoid collisions
+            cp "$f" "artifacts/${name}-${VERSION}.jar"
+          done
+          echo "Artifacts prepared:"
+          ls -alh artifacts
+
       - name: Upload JARs as artifact
         uses: actions/upload-artifact@v4
         with:
           name: jars-${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}
-          path: |
-            **/build/libs/*.jar
+          path: artifacts/*.jar
           if-no-files-found: error
           retention-days: 14
 
@@ -79,8 +107,7 @@ jobs:
         with:
           tag_name: "v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
           name: "Release v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
-          files: |
-            **/build/libs/*.jar
+          files: artifacts/*.jar
           draft: false
           prerelease: false
         env:
