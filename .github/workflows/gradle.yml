@@ -12,6 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ensure tags/history for build number calc
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -25,12 +27,12 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle Wrapper
+      - name: Build with Gradle Wrapper (shadow JARs)
         id: build
         run: |
-          ./gradlew shadowJar
-          # optional: print what was built
-          ls -alh build/libs
+          ./gradlew shadowJar --no-daemon
+          echo "== Built JARs =="
+          find . -type f -path "*/build/libs/*.jar" -print -exec ls -lh {} \;
 
       - name: Set version from Git SHA
         id: set_version
@@ -51,12 +53,14 @@ jobs:
             BUILD_NUMBER=1
           fi
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "Next build number: $BUILD_NUMBER"
 
       - name: Upload JARs as artifact
         uses: actions/upload-artifact@v4
         with:
           name: jars-${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}
-          path: build/libs/*.jar
+          path: |
+            **/build/libs/*.jar
           if-no-files-found: error
           retention-days: 14
 
@@ -76,7 +80,7 @@ jobs:
           tag_name: "v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
           name: "Release v${{ env.VERSION }}-build-${{ env.BUILD_NUMBER }}"
           files: |
-            build/libs/*.jar
+            **/build/libs/*.jar
           draft: false
           prerelease: false
         env:
