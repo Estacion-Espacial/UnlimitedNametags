@@ -28,7 +28,7 @@ jobs:
       - name: Build with Gradle Wrapper
         id: build
         run: |
-          ./gradlew build
+          ./gradlew shadowJar
           # optional: print what was built
           ls -alh build/libs
 
